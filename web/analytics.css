@@ -208,18 +208,18 @@ body:has(#analytics-view:not([hidden])) #records-section[hidden]{display:none}
 #evaluation-view .field-heading{margin:18px 0 9px}
 #evaluation-view .field-heading>span{font-size:12px}
 #evaluation-view .model-options{gap:8px}
-#evaluation-view .model-chip{font-size:14px;padding:10px 11px}
+#evaluation-view .model-chip{font-size:14px;padding:10px 11px;color:#34483d}
 #evaluation-view .model-chip small{font-size:11px}
 #evaluation-view .custom-model{gap:8px;margin-top:8px}
 #evaluation-view .custom-model input{font-size:16px}
 #evaluation-view .custom-model input::placeholder{font-size:16px;color:#53616a;opacity:1}
-#evaluation-view .custom-model button{font-size:14px;padding:0 11px}
+#evaluation-view .custom-model button{font-size:14px;padding:0 11px;color:#30463a}
 #evaluation-view .endpoint-box{margin:14px 0;padding:10px 12px}
-#evaluation-view .endpoint-label{font-size:13px}
+#evaluation-view .endpoint-label{font-size:13px;color:#40534a}
 #evaluation-view .endpoint-row{font-size:13px;margin-top:5px}
-#evaluation-view .endpoint-row b{font-size:11px}
-#evaluation-view .endpoint-row code{font-size:13px}
-#evaluation-view .advanced{margin:13px 0 16px}
+#evaluation-view .endpoint-row b{font-size:11px;color:#496057}
+#evaluation-view .endpoint-row code{font-size:13px;color:#344b40}
+#evaluation-view .advanced{margin:13px 0 16px;color:#40534a}
 #evaluation-view .advanced summary{font-size:13px}
 #evaluation-view .advanced summary span{font-size:14px;color:#53645a;margin-left:10px}
 #evaluation-view .advanced-grid{gap:10px;margin-top:14px}
@@ -227,16 +227,16 @@ body:has(#analytics-view:not([hidden])) #records-section[hidden]{display:none}
 #evaluation-view .advanced-grid input,#evaluation-view .advanced-grid select{font-size:14px;padding:8px;min-height:35px}
 #evaluation-view .model-chip small{font-size:12px}
 #evaluation-view .form-footer{padding:14px 0 16px}
-#evaluation-view .form-footer>span{font-size:13px}
+#evaluation-view .form-footer>span{font-size:13px;color:#53645a}
 #evaluation-view .form-footer .button{font-size:14px;padding:10px 16px}
 #evaluation-view .results-section{margin-top:22px}
 #evaluation-view .results-header{margin-bottom:12px}
 #evaluation-view .results-header h2{font-size:19px}
 #evaluation-view .results-header .step-label{font-size:11px}
-#evaluation-view table th{font-size:13px;padding:11px 13px}
-#evaluation-view table td{font-size:14px;padding:12px 13px}
-#evaluation-view table td small{font-size:12px;margin-top:4px}
-#evaluation-view .table-footer{font-size:12px;padding:9px 13px}
+#evaluation-view table th{font-size:13px;padding:11px 13px;color:#263b46;font-weight:750;background:#f1f4f5}
+#evaluation-view table td{font-size:14px;padding:12px 13px;color:#26343a}
+#evaluation-view table td small{font-size:12px;margin-top:4px;color:#53636b}
+#evaluation-view .table-footer{font-size:12px;padding:9px 13px;color:#42535b}
 #evaluation-view .empty-state h3{font-size:16px}
 #evaluation-view .empty-state p{font-size:14px;line-height:1.7}
 #evaluation-view .empty-state>div:last-child{font-size:12px}
