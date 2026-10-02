@@ -1,0 +1,11 @@
+[
+  ["857728.com", "gpt-6-astra", "https://857728.com/v1/responses"],
+  ["https://857728.com/", "opus-5-5", "https://857728.com/v1/messages"],
+  ["https://857728.com/v1/", "gpt-6-sol", "https://857728.com/v1/responses"],
+  ["https://857728.com/v1/responses", "opus-4-8", "https://857728.com/v1/messages"],
+  ["https://857728.com/v1/messages", "gpt-6-astra", "https://857728.com/v1/responses"],
+  ["https://857728.com/api/v1/chat/completions", "opus-5-5", "https://857728.com/api/v1/messages"],
+  ["https://857728.com/api", "claude-sonnet-5", "https://857728.com/api/v1/messages"],
+  ["https://857728.com/messages", "gpt-6-sol", "https://857728.com/responses"],
+  ["https://857728.com/api/v2", "custom-model", "https://857728.com/api/v2/responses"]
+]
