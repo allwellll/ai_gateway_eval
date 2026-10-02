@@ -23,7 +23,7 @@ journalctl -u ai-gateway-eval -n 50 --no-pager
 
 默认监听 `0.0.0.0:8080`，浏览器打开 `http://8.141.2.179:8080/`。阿里云安全组及主机防火墙需要允许相应端口。端口可通过 `PORT=8081 ./scripts/start.sh` 修改。启动会幂等检查数据库 schema。
 
-公网 HTTP 会明文传输用户输入的 API key，实际使用应配置下面的 HTTPS。API key 不落库、不写文件、不写日志，任务完成或取消后释放；浏览器成功提交后清空 key 输入框，也不会使用 localStorage/sessionStorage 保存 key。任务在内存中，服务重启会丢失进行中的任务；已落库结果不受影响。请以单 worker 运行，暂不支持多进程任务共享。
+公网 HTTP 会明文传输用户输入的 API key，实际使用应配置下面的 HTTPS。完整 API key 不落库、不写文件、不写日志；数据库只保存 `key_hash`（完整 key 的 SHA-256）和 `key_prefix`（前 6 位），网页显示前 6 位加 `***`，任务完成或取消后释放；浏览器成功提交后清空 key 输入框，也不会使用 localStorage/sessionStorage 保存 key。任务在内存中，服务重启会丢失进行中的任务；已落库结果不受影响。请以单 worker 运行，暂不支持多进程任务共享。
 
 ## Nginx + HTTPS
 
@@ -70,19 +70,43 @@ journalctl -u ai-gateway-eval -n 50 --no-pager
 - `tested_at` 保存实际执行时间；`tested_date` 默认为执行时间对应的上海日期，也可手动指定。
 - 结果添加 `result_uuid`，重复保存不会插入重复行。任务结果保留 1 小时（最多 256 个任务），历史记录持久保存。导入 API 接受用户自报结果，不能作为可信认证证明。
 
+## 数据分析首页
+
+网页默认展示质量分析，通过「新建评测」进入评测界面。支持域名、域名＋Key、域名＋Key＋模型三个分组维度，查看总体及单组时间趋势、热力分布和质量明细。范围默认为过去 12 小时，可切换 1 天或 7 天；按真实执行时间 `tested_at` 统计。完整计算口径与接口见 [数据分析协议](docs/ANALYTICS.md)。
+
+## 按 Key 统计
+
+新评测自动填写 `key_hash` 与 `key_prefix`。同一个 key 的标识稳定，不同 key 即使前 6 位相同也可以区分。历史数据的这两个字段保留 NULL（页面显示「未记录」），无法回填未曾保存的 key。
+
+网页历史查询可按前 6 位筛选；这种筛选可能匹配多个 key。精确查询与后续聚合应使用 `key_hash`，不使用 `key_prefix`。例如：
+
+```sql
+SELECT domain, model, key_hash, key_prefix,
+       count(*) AS evaluations,
+       count(*) FILTER (WHERE verdict = '真') AS identity_matches
+FROM ai_gateway_eval_results
+WHERE key_hash IS NOT NULL
+GROUP BY domain, model, key_hash, key_prefix;
+```
+
+批量保存结果接口接受成对的 `key_hash` 和 `key_prefix`，不接受完整 API key。哈希和前缀也会随结果 JSON 导出，便于离线聚合。
+
 ## API
+
+完整字段、写入示例、去重和统计口径见 [数据库与写入协议](docs/DATABASE_WRITE_PROTOCOL.md)。
 
 可访问 `/docs` 查看完整交互式接口文档。配置服务口令时，请求头为 `Authorization: Bearer <RESULTS_API_TOKEN>`。
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/health` | 数据库健康检查 |
+| GET | `/api/analytics` | 12 小时 / 1 天 / 7 天的分组统计与时间序列 |
 | POST | `/api/evaluations` | 提交评测，返回 202 与任务 ID |
 | GET | `/api/evaluations/{id}` | 进度、每轮状态、已完成结果、保存状态 |
 | POST | `/api/evaluations/{id}/cancel` | 取消在途任务 |
 | POST | `/api/evaluations/{id}/save` | 重试保存完成的结果，不重新评测 |
 | POST | `/api/results` | 批量保存结果，严格禁止额外字段（不接受 API key） |
-| GET | `/api/results` | 分页查询，可筛选 `domain`、`model`、`date_from`、`date_to`、`limit`、`offset` |
+| GET | `/api/results` | 分页查询，可筛选 `domain`、`model`、`key_hash`、`key_prefix`、`date_from`、`date_to`、`limit`、`offset` |
 
 创建任务示例（key 仅发给你自己的服务，不应放在命令历史或 URL 中）：
 

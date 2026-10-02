@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ class PureTests(unittest.TestCase):
     def test_answer_is_final_conclusion(self):
         for text, expected in [('21', 21), ('21 不足以保证。最终答案是 28。', 28),
                                ('先考虑 21，最终答案：29 个糖果。', 29), (r'答案为 $\boxed{21}$。', 21),
+                               ('最少需要取出21颗。\n所以，20颗仍可能无法配对，而21颗可以保证。', 21),
+                               (r'最少取出 \(21\) 个。最终答案为 \(\boxed{21\text{个}}\)。', 21),
                                ('题目包含 21 这个数字，但未得出结论。', None), ('无法回答', None)]:
             self.assertEqual(extract_answer(text), expected)
 
@@ -50,7 +53,7 @@ class PureTests(unittest.TestCase):
         fp = [{'text':'[1,2,3]', 'expected_count':3} for _ in range(3)]
         with patch('backend.evaluator.analyze_global_outputs', return_value={'prediction':'claude-opus-5-5','probability':.99}):
             result = summarize('opus-5-5', fp, [{'text':'最终答案是28'}], bank, True)
-            self.assertEqual(result['verdict'], '真')
+            self.assertEqual(result['verdict'], '存疑')
             self.assertEqual(result['candy'], '0/1')
             self.assertEqual(result['candy_answers'], '28')
             self.assertEqual(summarize('opus-5-5', fp, [{'text':'21'}], bank, False)['verdict'], '存疑')
@@ -130,6 +133,9 @@ class DatabaseTests(unittest.TestCase):
             self.assertTrue(all(r['candy_answers']=='28,28,28' for r in job['results']))
             data=self.client.get('/api/results',params={'domain':self.domain}).json()
             self.assertEqual(data['total'],2)
+            expected_hash = hashlib.sha256(b'private-test-key').hexdigest()
+            self.assertTrue(all(item['key_hash'] == expected_hash and item['key_prefix'] == 'privat' for item in data['items']))
+            self.assertEqual(self.client.get('/api/results',params={'domain':self.domain,'key_hash':expected_hash}).json()['total'],2)
             self.assertNotIn('private-test-key',json.dumps(data))
             retry=self.client.post('/api/evaluations/'+job_id+'/save')
             self.assertEqual(retry.status_code,200)
@@ -150,6 +156,26 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(len(calls),1)
             self.assertEqual(job['results'][0]['verdict'],'无法评测')
             self.assertNotIn('private-test-key',json.dumps(job))
+
+    def test_key_grouping_with_colliding_prefixes_and_legacy_rows(self):
+        first = hashlib.sha256(b'sk-abc-first-key').hexdigest()
+        second = hashlib.sha256(b'sk-abc-second-key').hexdigest()
+        base = {'domain':self.domain,'model':'gpt-6-astra'}
+        results = [dict(base,key_hash=first,key_prefix='sk-abc'),
+                   dict(base,key_hash=first,key_prefix='sk-abc'),
+                   dict(base,key_hash=second,key_prefix='sk-abc'), dict(base)]
+        response=self.client.post('/api/results',json={'results':results})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['items'][-1]['key_hash'])
+        self.assertIsNone(response.json()['items'][-1]['key_prefix'])
+        for key_hash,expected in ((first,2),(second,1)):
+            response=self.client.get('/api/results',params={'domain':self.domain,'key_hash':key_hash})
+            self.assertEqual(response.json()['total'],expected)
+        self.assertEqual(self.client.get('/api/results',params={'domain':self.domain,'key_prefix':'sk-abc'}).json()['total'],3)
+        for extra in ({'key_hash':first}, {'key_prefix':'sk-abc'}, {'key_hash':first,'key_prefix':'too-long'},
+                      {'key_hash':'not-a-hash','key_prefix':'sk-abc'}):
+            response=self.client.post('/api/results',json={'results':[dict(base,**extra)]})
+            self.assertEqual(response.status_code,422,response.text)
 
 
 if __name__ == '__main__': unittest.main()

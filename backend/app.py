@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from .db import connection, ensure_schema, load_dotenv
 from .evaluator import run_evaluation
 from .routing import endpoint_for, protocol_for_model
+from .analytics import analyze, dashboard
 
 load_dotenv()
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -71,8 +72,11 @@ class EvaluationResult(BaseModel):
     result_uuid: UUID = Field(default_factory=uuid4)
     tested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     tested_date: date | None = None
+    time_precision: Literal["timestamp", "date"] = "timestamp"
     domain: str = Field(min_length=1, max_length=253)
     model: str = Field(min_length=1, max_length=150)
+    key_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    key_prefix: str | None = Field(default=None, min_length=1, max_length=6)
     model_rate: Decimal | None = Field(default=None, ge=0, lt=1000, max_digits=6, decimal_places=3)
     recharge_rate: Decimal | None = Field(default=None, ge=0, lt=1000, max_digits=6, decimal_places=3)
     request_ip: str | None = None
@@ -104,7 +108,15 @@ class EvaluationResult(BaseModel):
 
     @model_validator(mode="after")
     def date_default(self):
-        if self.tested_date is None:
+        if (self.key_hash is None) != (self.key_prefix is None):
+            raise ValueError("key_hash 和 key_prefix 必须同时提供或同时留空")
+        if 'tested_date' in self.model_fields_set and self.tested_date is not None and 'tested_at' not in self.model_fields_set and 'time_precision' not in self.model_fields_set:
+            self.time_precision = 'date'
+        if self.time_precision == 'date':
+            if self.tested_date is None:
+                raise ValueError("仅日期记录必须提供 tested_date")
+            self.tested_at = datetime.combine(self.tested_date, datetime.min.time(), SHANGHAI)
+        elif self.tested_date is None:
             self.tested_date = self.tested_at.astimezone(SHANGHAI).date()
         return self
 
@@ -141,12 +153,14 @@ def save_results(batch: ResultBatch):
 @app.get("/api/results", dependencies=[Depends(authorize)])
 def query_results(domain: str | None = Query(default=None, max_length=253),
                   model: str | None = Query(default=None, max_length=150),
+                  key_hash: str | None = Query(default=None, pattern=r"^[0-9a-f]{64}$"),
+                  key_prefix: str | None = Query(default=None, min_length=1, max_length=6),
                   date_from: date | None = None, date_to: date | None = None,
                   limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
     if date_from and date_to and date_from > date_to:
         raise HTTPException(422, "起始日期不能晚于结束日期")
     clauses, args = [], []
-    for field, value, op in (("domain", domain, "="), ("model", model, "="), ("tested_date", date_from, ">="), ("tested_date", date_to, "<=")):
+    for field, value, op in (("domain", domain, "="), ("model", model, "="), ("key_hash", key_hash, "="), ("key_prefix", key_prefix, "="), ("tested_date", date_from, ">="), ("tested_date", date_to, "<=")):
         if value is not None:
             clauses.append(f"{field} {op} %s")
             args.append(value.lower() if field == "domain" else value)
@@ -155,6 +169,56 @@ def query_results(domain: str | None = Query(default=None, max_length=253),
         total = conn.execute("SELECT count(*) AS total FROM ai_gateway_eval_results" + where, args).fetchone()["total"]
         rows = conn.execute("SELECT * FROM ai_gateway_eval_results" + where + " ORDER BY tested_at DESC, id DESC LIMIT %s OFFSET %s", [*args, limit, offset]).fetchall()
     return {"items": rows, "total": total, "limit": limit, "offset": offset}
+
+
+@app.get("/api/analytics", dependencies=[Depends(authorize)])
+def analytics(window: Literal["12h", "1d", "7d"] = "12h",
+              group_by: Literal["domain", "domain_key", "domain_key_model"] = "domain",
+              domain: str | None = Query(default=None, min_length=1, max_length=253),
+              model: str | None = Query(default=None, min_length=1, max_length=150),
+              limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0)):
+    return analyze(window, group_by, domain, model, limit, offset)
+
+
+@app.get("/api/analytics/models", dependencies=[Depends(authorize)])
+def analytics_models(window: Literal["12h", "1d", "7d"] = "12h",
+                     domain: str | None = Query(default=None, min_length=1, max_length=253)):
+    # Include historical model names so an empty short window does not hide them.
+    with connection() as conn:
+        rows = conn.execute('SELECT DISTINCT model FROM ai_gateway_eval_results' +
+                            (' WHERE domain = %s' if domain else '') + ' ORDER BY model',
+                            [domain.lower()] if domain else []).fetchall()
+    return {"models": [row['model'] for row in rows]}
+
+
+@app.get("/api/analytics/dashboard", dependencies=[Depends(authorize)])
+def analytics_dashboard(window: Literal['12h', '1d', '7d', 'custom'] = '12h',
+                        date_from: date | None = None, date_to: date | None = None,
+                        domain: str | None = Query(default=None, min_length=1, max_length=253),
+                        model: str | None = Query(default=None, min_length=1, max_length=150),
+                        key_hash: str | None = Query(default=None, pattern=r'^[0-9a-f]{64}$'),
+                        key_recorded: bool | None = None,
+                        verdict: Literal['真', '换模', '存疑', '无法评测'] | None = None,
+                        fingerprint: str | None = Query(default=None, min_length=1, max_length=100),
+                        top_model: str | None = Query(default=None, min_length=1, max_length=150),
+                        candy: str | None = Query(default=None, min_length=1, max_length=50),
+                        include_unavailable: bool = False,
+                        history_limit: int = Query(default=30, ge=1, le=100),
+                        history_offset: int = Query(default=0, ge=0)):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(422, '起始日期不能晚于结束日期')
+    if window == 'custom' and not (date_from or date_to):
+        raise HTTPException(422, '自定义范围至少需要一个日期')
+    if window != 'custom' and (date_from or date_to):
+        raise HTTPException(422, '日期筛选需使用 custom 时间窗口')
+    try:
+        return dashboard(window=window, date_from=date_from, date_to=date_to,
+                         domain=domain, model=model, key_hash=key_hash, key_recorded=key_recorded,
+                         verdict=verdict, fingerprint=fingerprint, top_model=top_model, candy=candy,
+                         include_unavailable=include_unavailable,
+                         history_limit=history_limit, history_offset=history_offset)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 class EvaluationRequest(BaseModel):

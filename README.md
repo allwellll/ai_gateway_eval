@@ -2,6 +2,8 @@
 
 > **本机评测网页已实现**：运行 `./scripts/start.sh`，访问 `http://8.141.2.179:8080/`。
 > 数据库、启动配置、接口说明和验证方法见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+> 首页默认显示质量分析，支持 12 小时 / 1 天 / 7 天及三种分组维度；统计口径见 [数据分析协议](docs/ANALYTICS.md)。
+> 外部程序写入评测结果请参考 [数据库与写入协议](docs/DATABASE_WRITE_PROTOCOL.md)。
 > 网页由同一 FastAPI 服务提供，不使用 GitHub Pages；API key 仅供后端当前任务使用，不持久保存。
 
 > 整理日期：2026-10-02

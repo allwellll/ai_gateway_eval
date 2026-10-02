@@ -3,72 +3,96 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer">
-  <title>Gateway Lab · 模型评测台</title>
+  <title>Gateway Lab · 质量分析</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23163732'/%3E%3Cpath d='M11 12h18v5H16v7h8v-3h-4v-4h9v12H11z' fill='%23a5edb7'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./styles.css">
-  <script src="./config.js"></script><script type="module" src="./app.js"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261003-1"><link rel="stylesheet" href="./analytics.css?v=20261003-2">
+    <script src="./config.js?v=20261002-7"></script><script type="module" src="./app.js?v=20261003-2"></script>
+  <script src="./vendor/lucide.min.js"></script>
 </head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#"><span class="brand-icon">g<span>·</span></span><span>Gateway<span class="brand-light"> Lab</span></span></a>
     <div class="workspace-label">WORKSPACE <span>01</span></div>
-    <nav aria-label="主要导航"><a href="#evaluate" class="nav-link active"><span>◈</span> 模型评测 <small>LAB</small></a><a href="#history" class="nav-link" id="history-nav"><span>▤</span> 历史记录</a><a href="https://github.com/allwellll/ai_gateway_eval" target="_blank" rel="noreferrer" class="nav-link"><span>↗</span> 项目文档</a></nav>
+    <nav aria-label="主要导航"><a href="#evaluate" class="nav-link" id="evaluate-nav"><span>＋</span> 新建评测</a><a href="#ranking" class="nav-link" id="ranking-nav"><span>▤</span> 评测榜单</a><a href="#history" class="nav-link" id="history-nav"><span>≡</span> 历史记录</a><a href="https://github.com/allwellll/ai_gateway_eval" target="_blank" rel="noreferrer" class="nav-link"><span>↗</span> 项目文档</a></nav>
     <div class="side-note"><span class="mini-mark">∴</span><strong>看表现，辨模型。</strong><p>指纹归因与推理质量，<br>两个维度，一次评测。</p><div class="side-line"></div><span class="small-cap">BUILT FOR CLARITY</span></div>
     <div class="sidebar-footer"><span class="dot"></span> 自托管评测服务 <span>v1.0</span></div>
   </aside>
   <main>
-    <header class="topbar"><div class="breadcrumb">工作空间 <span>/</span> <strong>模型评测</strong></div><button class="service-button" id="service-toggle"><span class="status-dot" id="service-dot"></span><span id="service-status">连接评测服务</span><span>⚙</span></button></header>
+    <header class="topbar"><div class="breadcrumb">工作空间 <span>/</span> <strong id="page-name">数据分析</strong></div><button class="service-button" id="service-toggle"><span class="status-dot" id="service-dot"></span><span id="service-status">连接评测服务</span><span>⚙</span></button></header>
     <section id="service-panel" class="service-panel" hidden>
-      <div><h3>评测服务设置</h3><p>本机公网地址：8.141.2.179 · 默认端口：8080</p></div>
-      <label>后端地址<input id="backend-url" type="url" placeholder="https://eval-api.example.com" spellcheck="false"></label>
-      <label>服务访问口令（可选）<input id="service-token" type="password" autocomplete="off" placeholder="不是模型 API key"></label>
-      <button id="service-connect" class="button dark" type="button">连接服务</button>
+      <div><h3>评测服务</h3><p>页面会自动连接当前服务器的 8080 端口，结果保存在本机 PostgreSQL。</p></div>
       <p id="connection-message" class="connection-message" role="status"></p>
     </section>
     <div class="content">
-      <section class="page-heading" id="evaluate"><div><div class="eyebrow"><span></span> MODEL EVALUATION WORKSPACE</div><h1>让模型表现，自己说话<span>。</span></h1><p>验证模型身份，测试推理能力。每一次结果，都有迹可循。</p></div><div class="heading-number">01 <span>/ EVALUATE</span></div></section>
       <div id="alert" class="alert" role="alert" hidden></div>
+      <section id="analytics-view">
+        <div class="analysis-heading"><h1 id="analysis-title">评测榜单</h1></div>
+        <p id="analysis-status" class="analysis-status" role="status" aria-live="polite">正在加载分析数据…</p>
+        <section class="ranking-section" id="ranking-section">
+          <div class="analysis-controls ranking-controls">
+          <div id="analysis-windows" class="tabs"><button type="button" class="tab active" data-window="12h" aria-pressed="true">12 小时</button><button type="button" class="tab" data-window="1d" aria-pressed="false">1 天</button><button type="button" class="tab" data-window="7d" aria-pressed="false">7 天</button></div>
+          <div class="visible-models" id="visible-models" aria-label="榜单模型"><strong>模型</strong><div class="model-toggle-list"></div><button type="button" id="model-toggle-more" class="model-toggle-more" hidden>展开更多</button></div>
+          <button id="analysis-refresh" type="button" class="analysis-icon" title="刷新分析" aria-label="刷新分析"><i data-lucide="refresh-cw"></i></button>
+          </div>
+          <div id="analysis-filters" class="analysis-filters" aria-label="当前筛选条件"></div>
+          <div class="analysis-section-heading"><h2>模型评测 <span id="analysis-group-count"></span></h2><div class="quality-legend"><span><i class="quality-good"></i>良好</span><span><i class="quality-warning"></i>关注</span><span><i class="quality-bad"></i>问题</span><span><i class="quality-unknown"></i>无法评测</span></div></div>
+          <div id="model-leaderboards" class="model-leaderboards" tabindex="0" role="region" aria-label="各模型 Top 10 渠道"></div>
+        </section>
+        <section class="records-section" id="records-section">
+          <div class="analysis-section-heading"><h2>历史评测记录 <span id="analysis-record-count">0</span></h2><label class="unavailable-toggle"><input id="analysis-include-unavailable" type="checkbox"> 显示无法评测</label></div>
+          <div class="analysis-controls history-controls">
+            <div id="history-windows" class="tabs"><button type="button" class="tab active" data-window="12h" aria-pressed="true">12 小时</button><button type="button" class="tab" data-window="1d" aria-pressed="false">1 天</button><button type="button" class="tab" data-window="7d" aria-pressed="false">7 天</button></div>
+            <label class="model-filter">模型<select id="analysis-model"><option value="">全部模型</option></select></label>
+            <label class="domain-filter">域名<select id="analysis-domain"><option value="">全部域名</option></select></label>
+            <div class="date-range"><label>起始日期<input id="analysis-date-from" type="date"></label><span>至</span><label>结束日期<input id="analysis-date-to" type="date"></label></div>
+          </div>
+          <div id="history-filters" class="analysis-filters" aria-label="历史记录筛选条件"></div>
+          <div class="table-scroll"><table class="analysis-records"><thead><tr><th>时间</th><th>域名</th><th>模型</th><th>Key</th><th>指纹 / 实际模型</th><th>Candy / 逐轮答案</th><th>判定</th><th>详情</th></tr></thead><tbody id="analysis-records"></tbody></table></div>
+          <div id="analysis-empty" class="analysis-empty" hidden><strong>当前范围没有评测记录</strong></div>
+          <div class="analysis-pagination"><span id="analysis-page-info"></span><div><button id="analysis-prev" class="analysis-icon" title="上一页" aria-label="上一页"><i data-lucide="chevron-left"></i></button><button id="analysis-next" class="analysis-icon" title="下一页" aria-label="下一页"><i data-lucide="chevron-right"></i></button></div></div>
+        </section>
+        <details class="analysis-rules"><summary>评分与统计口径</summary><p>稳定性分 =（55% × 指纹匹配率 + 45% × Candy 加权正确率）× 可评分记录覆盖率 − 20% × 问题比例 − 10% ×（关注 + 无法评测）比例，最低为 0。缺少 Candy 时不评分。排名按分数、样本数排序；少于 3 次标记样本少。优先参考要求 Key 已记录、至少 3 次评测、分数 ≥ 80、无红色记录且最近一次为绿色；这只是历史参考，不是稳定性保证。</p><p>绿：指纹判定真、Candy ≥ 80%，答案无「?」。红：换模或 Candy &lt; 60%。黄：存疑、答案未知或信息不足。灰：无法评测。Candy 按正确轮次总和 ÷ 可评分轮次总和；无法评测不参与正确率。精确时间按 tested_at 滚动筛选；仅日期记录按与窗口重叠的日期纳入，不声称发生于具体小时。前缀相同的 Key 按完整哈希分别统计。</p></details>
+      </section>
+      <div id="evaluation-view" hidden>
+      <section class="page-heading" id="evaluate"><div><h1>新建评测</h1></div></section>
       <div class="workspace-grid">
         <section class="card evaluation-card">
           <div class="card-heading"><div><span class="step-label">01 / CONNECT</span><h2>新建评测</h2></div><span class="pill"><span class="dot"></span> 并发执行</span></div>
           <form id="eval-form">
             <fieldset id="eval-inputs">
-              <div class="input-grid"><label>接口地址 <span class="required">*</span><input id="base-url" name="endpoint" type="text" required placeholder="https://857728.com" autocomplete="off" spellcheck="false"><span class="hint">支持域名、/v1 或完整接口路径</span></label><label>API key <span class="required">*</span><div class="password-field"><input id="api-key" name="api-key" type="password" required placeholder="输入此站点的 API key" autocomplete="off" spellcheck="false"><button id="toggle-key" type="button" aria-label="显示 API key">显示</button></div><span class="hint">仅供本次评测使用，不保存到数据库</span></label></div>
+              <div class="input-grid"><label>接口地址 <span class="required">*</span><input id="base-url" name="endpoint" type="text" required placeholder="https://857728.com" autocomplete="off" spellcheck="false"><span class="hint">支持域名、/v1 或完整接口路径</span></label><label>API key <span class="required">*</span><div class="password-field"><input id="api-key" name="api-key" type="password" required placeholder="输入此站点的 API key" autocomplete="off" spellcheck="false"><button id="toggle-key" type="button" aria-label="显示 API key">显示</button></div><span class="hint">只保存前 6 位与统计标识，不保存完整 key</span></label></div>
               <div class="field-heading"><label>选择模型</label><span>可多选 · 按模型自动匹配接口</span></div>
               <div class="model-options" id="models">
                 <label class="model-chip"><input type="checkbox" value="gpt-6-astra" checked><span class="model-symbol">✳</span><span>gpt-6-astra</span><small>默认</small></label>
-                <label class="model-chip"><input type="checkbox" value="opus-5-5"><span class="model-symbol orange">✺</span><span>opus-5-5</span><small>推荐</small></label>
+                <label class="model-chip"><input type="checkbox" value="claude-opus-5-5"><span class="model-symbol orange">✺</span><span>claude-opus-5-5</span><small>推荐</small></label>
                 <label class="model-chip"><input type="checkbox" value="gpt-6-sol"><span class="model-symbol">✳</span><span>gpt-6-sol</span></label>
-                <label class="model-chip"><input type="checkbox" value="opus-4-8"><span class="model-symbol orange">✺</span><span>opus-4-8</span></label>
+                <label class="model-chip"><input type="checkbox" value="claude-opus-4-8"><span class="model-symbol orange">✺</span><span>claude-opus-4-8</span></label>
               </div>
               <div class="custom-model"><input id="custom-model" aria-label="手动输入模型名称" placeholder="其他模型名称，例如 claude-sonnet-5" maxlength="150" spellcheck="false"><button id="add-model" type="button">＋ 添加模型</button></div>
               <div class="endpoint-box"><div class="endpoint-label"><span>↳</span> 实际请求地址 <span class="auto-tag">自动匹配</span></div><div id="endpoints" class="endpoints"><span class="hint">输入接口地址后显示</span></div></div>
               <details class="advanced"><summary>评测选项 <span>轮次、并发、日期及倍率</span></summary><div class="advanced-grid">
                 <label>Candy 轮次<select id="candy-runs"><option value="3">3 轮</option><option value="5" selected>5 轮 · 默认</option><option value="10">10 轮</option></select></label>
-                <label>并发请求数<input id="concurrency" type="number" min="1" max="24" value="16" required></label>
+                <label>并发请求数<input id="concurrency" type="number" min="1" max="24" value="8" required></label>
                 <label>单次超时（秒）<input id="timeout" type="number" min="10" max="600" value="300" required></label>
                 <label>评测日期<input id="tested-date" type="date"></label>
                 <label>模型倍率<input id="model-rate" type="number" min="0" max="999.999" step="0.001" placeholder="未知"></label>
                 <label>充值倍率<input id="recharge-rate" type="number" min="0" max="999.999" step="0.001" placeholder="未知"></label>
                 <label class="wide">备注<input id="note" maxlength="400" placeholder="可选，说明本次使用的分组或套餐，请勿填写 key"></label>
-              </div><p class="hint">倍率为本次所选模型共用的手填值；未知留空。日期默认采用上海时区。</p></details>
+              </div><p class="hint">倍率为本次所选模型共用的手填值；未知留空。日期按服务器时区保存。</p></details>
             </fieldset>
             <div class="form-footer"><span id="request-count">1 个模型 · 8 次请求</span><button type="submit" class="button primary" id="start-button">开始评测 <span>↗</span></button></div>
           </form>
         </section>
-        <aside class="right-column">
-          <section class="method-card"><span class="step-label">TWO SIGNALS. ONE PICTURE.</span><h2>不只问它是谁，<br>还看它答得怎样。</h2><div class="method-item"><div class="method-icon">◉</div><div><h3>指纹归因 <span>ModelTrace</span></h3><p>3 次数列探针，对照参考库，<br>判断模型身份是否一致。</p></div></div><div class="method-item"><div class="method-icon candy">✧</div><div><h3>推理质量 <span>Candy</span></h3><p>独立多轮糖果题，记录正确率<br>与每轮答案。</p></div></div><div class="method-footnote">模型身份与推理得分分别报告。<br>指纹结果是统计参考，并非身份凭证。</div></section>
-          <section class="connection-card"><div class="small-cap">YOUR EVALUATION NODE</div><strong>8.141.2.179 <span>↗</span></strong><p>请求由此服务器发出，<br>评测完成后自动保存结果。</p><span class="node-label">POSTGRESQL · 持久存储</span></section>
-        </aside>
       </div>
       <section id="progress-section" class="card progress-card" hidden aria-live="polite"><div class="progress-heading"><div><span class="step-label">02 / RUNNING</span><h2 id="progress-title">正在准备评测</h2></div><div><span id="progress-counter">0 / 0</span><button class="text-button" id="cancel-button">取消评测</button></div></div><progress id="progress-bar" max="1" value="0"></progress><div id="model-progress"></div><div class="progress-actions"><button id="resume-button" class="text-button" hidden>恢复进度查询</button><button id="retry-save" class="text-button" hidden>重试保存结果</button><button id="export-button" class="text-button" hidden>下载本次结果 JSON ↗</button></div></section>
-      <section class="results-section" id="history"><div class="results-header"><div><div class="step-label">03 / RESULTS</div><h2>每次评测，都有记录<span id="result-count">0</span></h2></div><div class="tabs" role="tablist"><button class="tab active" role="tab" aria-selected="true" id="current-tab">本次结果</button><button class="tab" role="tab" aria-selected="false" id="history-tab">历史记录</button></div></div>
-        <form id="history-filters" class="history-filters" hidden><label>域名<input id="filter-domain" placeholder="全部域名"></label><label>模型<input id="filter-model" placeholder="全部模型"></label><label>起始日期<input id="date-from" type="date"></label><label>结束日期<input id="date-to" type="date"></label><button class="button dark" type="submit">查询</button></form>
-        <div class="card table-card"><div class="table-scroll"><table><thead><tr><th>日期 / 站点</th><th>测试模型</th><th>倍率 <span>模型 / 充值</span></th><th>指纹 / 实际模型</th><th>Candy / 逐轮答案</th><th>判定</th><th>详情</th></tr></thead><tbody id="results-body"></tbody></table></div><div id="empty-state" class="empty-state"><div class="empty-icon">▥</div><h3>第一份结果，从一次评测开始</h3><p>输入接口地址与 key，选择模型后点击「开始评测」。</p><div><span>01 连接</span><i>⟶</i><span>02 评测</span><i>⟶</i><span>03 记录</span></div></div><div class="table-footer"><span id="table-info">结果会在评测后自动保存</span><div id="pagination" hidden><button id="previous-page" class="text-button">← 上一页</button><span id="page-number"></span><button id="next-page" class="text-button">下一页 →</button></div></div></div>
+      <section class="results-section"><div class="results-header"><div><div class="step-label">评测结果</div><h2>本次结果<span id="result-count">0</span></h2></div></div>
+        <div class="card table-card"><div class="table-scroll"><table><thead><tr><th>日期 / 站点</th><th>API key</th><th>测试模型</th><th>倍率 <span>模型 / 充值</span></th><th>指纹 / 实际模型</th><th>Candy / 逐轮答案</th><th>判定</th><th>详情</th></tr></thead><tbody id="results-body"></tbody></table></div><div id="empty-state" class="empty-state"><div class="empty-icon">▥</div><h3>第一份结果，从一次评测开始</h3><p>输入接口地址与 key，选择模型后点击「开始评测」。</p><div><span>01 连接</span><i>⟶</i><span>02 评测</span><i>⟶</i><span>03 记录</span></div></div><div class="table-footer"><span id="table-info">结果会在评测后自动保存</span><div id="pagination" hidden><button id="previous-page" class="text-button">← 上一页</button><span id="page-number"></span><button id="next-page" class="text-button">下一页 →</button></div></div></div>
       </section>
+      </div>
       <footer class="page-footer"><span><strong>Gateway Lab</strong> / 可追溯的模型评测</span><span>ModelTrace + Candy <i>·</i> 数据保存在你的服务器</span></footer>
     </div>
   </main>
+  <dialog id="analytics-dialog"><div class="dialog-heading"><h2>评测记录详情</h2><button id="close-analytics-dialog" class="text-button" aria-label="关闭评测详情">✕</button></div><dl id="analytics-detail"></dl></dialog>
   <dialog id="detail-dialog"><div class="dialog-heading"><h2>评测详情</h2><button id="close-dialog" class="text-button" aria-label="关闭详情">✕</button></div><dl id="detail-content"></dl></dialog>
 </body>
 </html>

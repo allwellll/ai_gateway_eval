@@ -2,5 +2,5 @@
   "name": "ai-gateway-eval-web",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/routing.test.js" }
+  "scripts": { "test": "node --test tests/*.test.js" }
 }

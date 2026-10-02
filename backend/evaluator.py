@@ -1,5 +1,6 @@
 """Concurrent evaluations. Credentials stay in the running task's memory."""
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 import json
 import os
@@ -31,18 +32,35 @@ def extract_answer(text):
     cleaned = text.strip().replace("**", "").replace("\\(", "").replace("\\)", "")
     if re.fullmatch(r"\d{1,4}[。.!！]?", cleaned):
         return int(re.search(r"\d+", cleaned).group())
+    # Models often explain why a smaller number fails after stating the answer,
+    # e.g. "所以，20 颗仍可能无法配对，而 21 颗可以保证".  Do not let that
+    # explanatory 20 override an explicit answer or minimum-count statement.
     candidates = []
-    patterns = [r"\\boxed\{\s*(\d{1,4})\s*\}",
-                r"(?:最终答案|答案|最少(?:需要|要)?(?:取出|摸出|拿出)?|至少(?:需要|要)?(?:取出|摸出|拿出)?|最小(?:数量|数目|值)|answer)\s*(?:是|为|为：|is|=|：|:)?\s*(\d{1,4})(?!\d)",
-                r"(?:因此|所以|综上|结论)[^。\n]{0,60}?(\d{1,4})\s*(?:颗|个)(?:糖果|糖)?"]
-    for pattern in patterns:
-        for match in re.finditer(pattern, cleaned, re.I):
-            candidates.append((match.end(), int(match.group(1))))
+    boxed = (r"\\boxed\s*\{\s*(\d{1,4})"
+             r"(?:\s*\\text\s*\{[^{}]*\})?\s*\}")
+    explicit = (r"(?:最终答案|答案)\s*(?:是|为|为：|is|=|：|:)?\s*"
+                r"(?:\\boxed\s*\{\s*)?(\d{1,4})")
+    minimum = (r"(?:最少|至少)(?:需要|要)?(?:取出|摸出|拿出)?\s*"
+               r"(?:是|为|为：|is|=|：|:)?\s*(\d{1,4})(?!\d)")
+    for match in re.finditer(boxed, cleaned, re.I):
+        candidates.append((3, match.end(), int(match.group(1))))
+    for match in re.finditer(explicit, cleaned, re.I):
+        candidates.append((2, match.end(), int(match.group(1))))
+    for match in re.finditer(minimum, cleaned, re.I):
+        candidates.append((1, match.end(), int(match.group(1))))
     if candidates:
-        return max(candidates)[1]
+        priority = max(item[0] for item in candidates)
+        return max((item for item in candidates if item[0] == priority), key=lambda item: item[1])[2]
     # A bare count is accepted only on the final nonempty line.
     match = re.fullmatch(r"(\d{1,4})\s*(?:颗|个)(?:糖果|糖)?[。.!！]?", cleaned.splitlines()[-1] if cleaned else "")
-    return int(match.group(1)) if match else None
+    if match:
+        return int(match.group(1))
+    # Last-resort conclusion parsing for answers without an explicit marker.
+    for match in re.finditer(r"(?:因此|所以|综上|结论)([^。\n]{0,120})", cleaned, re.I):
+        numbers = list(re.finditer(r"\d{1,4}", match.group(1)))
+        if numbers:
+            return int(numbers[-1].group())
+    return None
 
 
 async def fresh_bank():
@@ -85,6 +103,11 @@ def summarize(model, fingerprint_outputs, candy_outputs, bank, refreshed):
         verdict = "无法评测"
     answers = [extract_answer(output.get("text", "")) if not output.get("error") else None for output in candy_outputs]
     scored = [answer for answer in answers if answer is not None]
+    candy_correct = sum(answer == 21 for answer in scored)
+    # A strong fingerprint match is not enough to call a model genuine when
+    # Candy shows at most half of the scored rounds are correct.
+    if verdict == "真" and scored and candy_correct * 2 <= len(scored):
+        verdict = "存疑"
     errors.extend(output["error"] for output in candy_outputs if output.get("error"))
     note = [f"Candy 可评分 {len(scored)}/{len(answers)}，失败或无法解析 {len(answers) - len(scored)}"]
     if attribution:
@@ -106,6 +129,8 @@ async def run_evaluation(request, job, global_limit):
     bank, refreshed = await fresh_bank()
     job["phase"] = "正在并发评测"
     key = request.api_key.get_secret_value()
+    key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    key_prefix = key[:6]
     local_limit = asyncio.Semaphore(request.concurrency)
     circuit = asyncio.Event()
     resolver = PublicResolver()
@@ -148,6 +173,7 @@ async def run_evaluation(request, job, global_limit):
                 row = {"result_uuid": str(uuid4()), "tested_at": stamp.isoformat(),
                        "tested_date": str(request.tested_date or stamp.astimezone(ZoneInfo("Asia/Shanghai")).date()),
                        "domain": urlsplit(endpoint).hostname, "model": model,
+                       "key_hash": key_hash, "key_prefix": key_prefix,
                        "model_rate": request.model_rate, "recharge_rate": request.recharge_rate,
                        "request_ip": os.getenv("EVALUATION_EGRESS_IP") or None, **summary}
                 row["note"] = redact(f"/{protocol}；耗时 {elapsed}s；{row['note']}" + (f"；{request.note}" if request.note else ""), key)[:4000]
